@@ -38,8 +38,7 @@
   // logo: খালি রাখলে নিচের LOGOS থেকে id মিলিয়ে নেয়। সেখানেও না থাকলে favicon, না মিললে নামের প্রথম অক্ষর।
   //       চাইলে এখানে সরাসরি ছবির https:// লিংকও দিতে পারেন।
   // theme: holo | cyber | crimson | gold | pink | emerald | indigo | teal
-  var DOVASHI_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#0b6a62"/>' +
+  var AMARBOI_ICON = 'data:image/svg+xml;utf8,'ZONI_ICON = 'data:image/svg+xml;utf8,'DOVASHI_ICON = 'data:image/svg+xml;utf8,'QUARAN_ICON = 'data:image/svg+xml;utf8,'FAMILY_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent( '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#0b6a62"/>' +
     '<path d="M96 150a46 46 0 0 1 46-46h150a46 46 0 0 1 46 46v90a46 46 0 0 1-46 46H190l-62 52v-52h-0a46 46 0 0 1-32-44z" fill="#ffffff"/>' +
     '<path d="M216 270a46 46 0 0 1 46-46h108a46 46 0 0 1 46 46v96a46 46 0 0 1-32 44v50l-60-48H262a46 46 0 0 1-46-46z" fill="#7fe0d3"/>' +
     '<text x="190" y="226" font-size="104" text-anchor="middle" fill="#0b6a62" font-family="Noto Naskh Arabic, Geeza Pro, serif" font-weight="700">ع</text>' +
@@ -48,22 +47,24 @@
   // ===== লোগো ভান্ডার: প্রতিটি সাইটের id অনুযায়ী ছবি (data:image/... লেখা বা https:// লিংক) =====
   // নতুন লোগো যোগ করতে add-logo.html দিয়ে লাইন বানিয়ে এখানে বসান।
   var LOGOS = {
-    dovashi: DOVASHI_ICON
+    amarboi: AMARBIOI_ICON,
+     zoni: ZONI_ICON,
+   dovashi: DOVASHI_ICON,
+   quaran: QUARAN_ICON,
+   family: FAMILY_ICON,
+     shed:SHED_ICON
   };
   // photo: কার্ডের পোস্টার ছবি। 'img:নাম' = ফাইলের ভেতরে সংরক্ষিত ছবি (নিচের শেষে), অথবা https:// লিংক। খালি = শুধু রঙিন থিম।
   // একটি সাইটের কনফিগ আলাদা রাখতে চাইলে পেজে আগে window.PROJECT_HUB_CONFIG = {sites:[...]} বসান।
 
   var SITES = [
     { id: 'amarboi',   name: 'KIDS LEARNING',      url: 'https://amarboi.netlify.app/',        logo: '', photo: 'img:abc', theme: 'cyber' },
-    { id: 'zoni',      name: 'ZONI SKIN CARE',     url: 'https://zoniskincare.vercel.app/',    logo: '', photo: 'img:cosmetics', theme: 'pink' },
-    { id: 'dovashi',   name: 'DOVASHI LIVE',       url: 'https://dovashi.vercel.app/',         logo: '', photo: 'img:quran', theme: 'emerald' },
-    { id: 'hill',      name: 'HILL ECO TOURISM',   url: 'https://hillecotourism.vercel.app/',  logo: '', theme: 'teal' },
-    { id: 'verandah',  name: 'MODERN VERANDAH',    url: 'https://modernverandah.vercel.app/',  logo: '', theme: 'gold' },
-    { id: 'shed',      name: 'VENTILATED SHED',    url: 'https://ventilatedshed.vercel.app/',  logo: '', theme: 'indigo' },
-    { id: 'gz',        name: 'GUANGZHOU SOURCING', url: 'https://gzsourcing.vercel.app/',      logo: '', photo: 'img:spices', theme: 'crimson' },
-    { id: 'airgds',    name: 'AIR TICKETING GDS',  url: 'https://airgds.vercel.app/',          logo: '', photo: 'img:baggage', theme: 'holo' },
-    { id: 'ielts',     name: 'IELTS VOCAB HUB',    url: 'https://ieltsvocab.vercel.app/',      logo: '', theme: 'cyber' },
-    { id: 'propertybd', name: 'PROPERTY BD',       url: 'https://propertybd.vercel.app/',      logo: '', theme: 'emerald' }
+    { id: 'zoni',      name: 'ZONI SKIN CARE',     url: 'https://zoniskincare.vercel.app/',    logo: '', photo: 'img:zoniskincare', theme: 'pink' },
+    { id: 'dovashi',   name: 'DOVASHI LIVE',       url: 'https://2bsa.netlify.app/',           logo: '', photo: 'img:2bsa', theme: 'emerald' },
+    { id: 'quaran',  name: 'BANGLA QUARAN',   url: 'https://bangla-quaran.vercel.app/',        logo: '', photo : 'img:quaran',teal' },
+    { id: 'family',  name: 'FAMLIY MANAGER',    url: 'https://famliy-manger.vercel.app/',     logo: '', photo: 'img:family-manger', theme: 'gold' },
+    { id: 'shed',      name: 'FAMLIY MANAGER ',    url: 'https://ventilatedshed.vercel.app/',  logo: '', theme: 'indigo' },
+     
   ];
   var USER = window.PROJECT_HUB_CONFIG || {};
   if (Array.isArray(USER.sites) && USER.sites.length) SITES = USER.sites.map(function (x, i) { x = x || {}; x.id = x.id || 'site-' + i; return x; });
@@ -738,6 +739,6 @@
 
 </script>
 <!-- ===== PROJECT HUB HERO: শেষ ===== -->
-<main class="page"><h2>এখানে আপনার সাইটের আসল কনটেন্ট থাকবে</h2></main>
+<main class="page"><h2> Now Continue </h2></main>
 </body>
 </html>
