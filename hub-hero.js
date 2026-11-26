@@ -111,6 +111,7 @@
     share: 'M12 3v12|M8 7l4-4 4 4|M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7',
     edit: 'M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z|M13.5 6.5l4 4',
     left: 'M15 5l-7 7 7 7',
+    down: 'M6 9l6 6 6-6',
     right: 'M9 5l7 7-7 7',
     link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1|M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1'
   };
@@ -214,6 +215,7 @@
   var query = '';
   var toastTimer = null, scrollTimer = null, lastFocus = null, delTimer = null;
   var draftLogo = '';  // আপলোড করা ছবি (data URL)
+  var draftPhoto = ''; // কার্ডের ব্যাকগ্রাউন্ড ছবি (data URL বা লিংক)
 
   function toast(msg) {
     if (!R.toast) return;
@@ -399,7 +401,15 @@
     var logo = draftLogo || validLogo(R.logoUrl.value);
     R.preview.textContent = '';
     R.preview.appendChild(makeLogo({ name: R.name.value.trim() || '?', url: url || 'https://example.com', logo: logo, theme: R.theme.value }));
+    refreshPhotoPreview();
     R.preview.appendChild(h('span', { class: 'hint', text: logo ? 'আপনার দেওয়া লোগো' : (url && CONFIG.useFavicon ? 'সাইটের favicon দেখানো হবে (না মিললে নামের প্রথম অক্ষর)' : 'লোগো না দিলে নামের প্রথম অক্ষর দেখানো হবে') }));
+  }
+  function refreshPhotoPreview() {
+    var ph = draftPhoto || validLogo(R.photoUrl.value);
+    var box = R.photoPrev;
+    box.textContent = '';
+    box.style.backgroundImage = ph && resolveImg(ph) ? 'url("' + resolveImg(ph).replace(/"/g, '%22') + '")' : (THEMES[R.theme.value] || THEMES.holo);
+    box.appendChild(h('span', { class: 'hint ph-hint', text: ph ? 'ব্যাকগ্রাউন্ড ছবি' : 'ছবি নেই, শুধু থিমের রঙ' }));
   }
   function fillSlotSelect(selected) {
     R.slot.textContent = '';
@@ -409,15 +419,16 @@
   }
   function fillForm(slot) {
     R.err.hidden = true; R.err.textContent = '';
-    R.file.value = '';
+    R.file.value = ''; R.photoFile.value = '';
     clearTimeout(delTimer); R.del.textContent = 'মুছুন'; R.del.classList.remove('armed');
     if (slot === 'new' || !list[parseInt(slot, 10)]) {
-      R.name.value = ''; R.url.value = ''; R.logoUrl.value = ''; draftLogo = ''; R.theme.value = 'holo';
+      R.name.value = ''; R.url.value = ''; R.logoUrl.value = ''; draftLogo = ''; draftPhoto = ''; R.photoUrl.value = ''; R.theme.value = 'holo';
       R.del.hidden = true;
     } else {
       var s = list[parseInt(slot, 10)];
       R.name.value = s.name; R.url.value = s.url; R.theme.value = s.theme;
       if (isDataImg(s.logo)) { draftLogo = s.logo; R.logoUrl.value = ''; } else { draftLogo = ''; R.logoUrl.value = s.logo; }
+      if (isDataImg(s.photo)) { draftPhoto = s.photo; R.photoUrl.value = ''; } else { draftPhoto = ''; R.photoUrl.value = s.photo || ''; }
       R.del.hidden = false;
     }
     refreshPreview();
@@ -447,10 +458,13 @@
     var logoText = R.logoUrl.value.trim();
     var logo = draftLogo || validLogo(logoText);
     if (!draftLogo && logoText && !logo) return fail('লোগোর লিংক সঠিক নয়। https:// দিয়ে শুরু হওয়া ছবির লিংক দিন, অথবা ছবি আপলোড করুন।', R.logoUrl);
-    var rec = { name: name, url: url, logo: logo, theme: THEMES[R.theme.value] ? R.theme.value : 'holo' };
+    var photoText = R.photoUrl.value.trim();
+    var photo = draftPhoto || validLogo(photoText);
+    if (!draftPhoto && photoText && !photo) return fail('ব্যাকগ্রাউন্ড ছবির লিংক সঠিক নয়। https:// দিয়ে শুরু করুন।', R.photoUrl);
+    var rec = { name: name, url: url, logo: logo, photo: photo, theme: THEMES[R.theme.value] ? R.theme.value : 'holo' };
     var slot = R.slot.value, idx;
     var prev = slot === 'new' ? null : list[parseInt(slot, 10)];
-    if (prev && prev.photoRaw) rec.photo = prev.photoRaw;
+    if (prev && prev.photoRaw && photo && photo === prev.photo) rec.photo = prev.photoRaw;
     if (slot === 'new') {
       rec.id = uid(); state.added.push(rec); idx = list.length;
     } else {
@@ -492,30 +506,44 @@
     active = 0; renderCards(); closeModal(); toast('কোডের মূল তালিকায় ফেরা হয়েছে।');
   }
 
-  function handleFile() {
-    var f = R.file.files && R.file.files[0];
-    if (!f) return;
-    if (!f.type || f.type.indexOf('image/') !== 0) { fail('শুধু ছবির ফাইল দিন।'); return; }
+  // ছবি পড়ে canvas এ কেটে (crop) নেয়: মাঝখান থেকে, নির্দিষ্ট মাপে ভরাট করে (cover)।
+  function readImage(file, opts, done) {
+    if (!file) return;
+    if (!file.type || file.type.indexOf('image/') !== 0) { fail('শুধু ছবির ফাইল দিন।'); return; }
     var fr = new FileReader();
     fr.onerror = function () { fail('ছবিটি পড়া যায়নি।'); };
     fr.onload = function () {
       var data = String(fr.result || '');
-      if (f.type === 'image/svg+xml') {
+      if (file.type === 'image/svg+xml' && !opts.jpeg) {
         if (data.length > 200000) { fail('SVG ফাইল বড় (২০০ KB এর বেশি)।'); return; }
-        draftLogo = data; R.logoUrl.value = ''; R.err.hidden = true; refreshPreview(); return;
+        done(data); return;
       }
       var img = new Image();
       img.onload = function () {
-        var max = 192, w = img.naturalWidth || max, hh = img.naturalHeight || max, sc = Math.min(1, max / Math.max(w, hh));
-        var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w * sc)); c.height = Math.max(1, Math.round(hh * sc));
-        try { c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); draftLogo = c.toDataURL('image/png'); }
-        catch (e) { draftLogo = data; }
-        R.logoUrl.value = ''; R.err.hidden = true; refreshPreview();
+        var w = img.naturalWidth || 1, hh = img.naturalHeight || 1, ow = opts.w, oh = opts.h;
+        var sc = Math.max(ow / w, oh / hh), sw = ow / sc, sh = oh / sc, sx = (w - sw) / 2, sy = (hh - sh) / 2;
+        var c = document.createElement('canvas'); c.width = ow; c.height = oh;
+        try {
+          var cx = c.getContext('2d');
+          if (opts.jpeg) { cx.fillStyle = '#0B0F14'; cx.fillRect(0, 0, ow, oh); }
+          cx.drawImage(img, sx, sy, sw, sh, 0, 0, ow, oh);
+          done(c.toDataURL(opts.jpeg ? 'image/jpeg' : 'image/png', 0.78));
+        } catch (e) { done(data); }
       };
       img.onerror = function () { fail('ছবিটি খোলা যায়নি।'); };
       img.src = data;
     };
-    fr.readAsDataURL(f);
+    fr.readAsDataURL(file);
+  }
+  function handleFile() {
+    readImage(R.file.files && R.file.files[0], { w: 192, h: 192 }, function (d) {
+      draftLogo = d; R.logoUrl.value = ''; R.err.hidden = true; refreshPreview();
+    });
+  }
+  function handlePhoto() {
+    readImage(R.photoFile.files && R.photoFile.files[0], { w: 340, h: 486, jpeg: true }, function (d) {
+      draftPhoto = d; R.photoUrl.value = ''; R.err.hidden = true; refreshPreview();
+    });
   }
 
   /* ---------- কাঠামো তৈরি ---------- */
@@ -528,6 +556,10 @@
       oninput: function () { if (R.logoUrl.value) draftLogo = ''; refreshPreview(); } });
     R.file = h('input', { type: 'file', id: 'f-file', accept: 'image/*', class: 'file', tabindex: '-1', 'aria-hidden': 'true', onchange: handleFile });
     R.preview = h('div', { class: 'preview' });
+    R.photoUrl = h('input', { type: 'text', id: 'f-photo', inputmode: 'url', placeholder: 'https://.../poster.jpg (ঐচ্ছিক)', autocomplete: 'off',
+      oninput: function () { if (R.photoUrl.value) draftPhoto = ''; refreshPreview(); } });
+    R.photoFile = h('input', { type: 'file', id: 'f-photofile', accept: 'image/*', class: 'file', tabindex: '-1', 'aria-hidden': 'true', onchange: handlePhoto });
+    R.photoPrev = h('div', { class: 'photo-prev' });
     R.slot = h('select', { id: 'f-slot', onchange: function () { fillForm(R.slot.value); } });
     R.theme = h('select', { id: 'f-theme', onchange: function () { refreshPreview(); } },
       Object.keys(THEMES).map(function (k) { return h('option', { value: k, text: THEME_LABELS[k] }); }));
@@ -549,6 +581,18 @@
             h('button', { type: 'button', class: 'btn dark sm', text: 'লোগো মুছুন', onclick: function () { draftLogo = ''; R.logoUrl.value = ''; R.file.value = ''; refreshPreview(); } })
           ]),
           R.file
+        ])
+      ]),
+      h('div', { class: 'field' }, [
+        h('label', { for: 'f-photo', text: 'ব্যাকগ্রাউন্ড ছবি (কার্ডের পেছনে)' }),
+        h('div', { class: 'logo-box' }, [
+          R.photoPrev,
+          R.photoUrl,
+          h('div', { class: 'row2' }, [
+            h('button', { type: 'button', class: 'filebtn', text: '+ ব্যাকগ্রাউন্ড ছবি আপলোড', onclick: function () { R.photoFile.click(); } }),
+            h('button', { type: 'button', class: 'btn dark sm', text: 'ছবি মুছুন', onclick: function () { draftPhoto = ''; R.photoUrl.value = ''; R.photoFile.value = ''; refreshPreview(); } })
+          ]),
+          R.photoFile
         ])
       ]),
       h('div', { class: 'field' }, [h('label', { for: 'f-theme', text: 'পোস্টার থিম স্টাইল' }), R.theme]),
@@ -597,16 +641,20 @@
     R.next = h('button', { type: 'button', class: 'arrow r', 'aria-label': 'ডানে সরান', onclick: function () { stepScroll(1); } }, [icon(I.right, 20, 2.4)]);
     R.toast = h('div', { class: 'toast', role: 'status', 'aria-live': 'polite' });
 
-    var hero = h('section', { class: 'hero', 'aria-label': 'প্রজেক্ট হাব' }, [
+    var hero = R.hero = h('section', { class: 'hero is-open', 'aria-label': 'প্রজেক্ট হাব' }, [
       h('div', { class: 'nav' }, [
-        h('div', { class: 'brand' }, [h('span', { class: 'dot' }), 'PROJECT HUB']),
+        R.toggle = h('button', { type: 'button', class: 'brand', 'aria-expanded': 'true', 'aria-controls': 'hub-body',
+          title: 'হিরো বন্ধ বা খুলুন', onclick: function () { setOpen(!R.hero.classList.contains('is-open')); } },
+          [h('span', { class: 'dot' }), 'PROJECT HUB', R.chev = icon(I.down, 16, 2.6)]),
         h('div', { class: 'actions' }, [
           h('label', { class: 'searchbox' }, [icon(I.search, 14, 2.3), R.search]),
           h('button', { type: 'button', class: 'add', onclick: function () { openModal('new'); } }, [icon(I.plus, 14, 2.6), 'যোগ করুন'])
         ])
       ]),
-      h('div', { class: 'head' }, [R.title, R.sub, R.now]),
-      h('div', { class: 'stage' }, [R.row, R.prev, R.next, R.count])
+      h('div', { class: 'body', id: 'hub-body' }, [h('div', { class: 'body-in' }, [
+        h('div', { class: 'head' }, [R.title, R.sub, R.now]),
+        h('div', { class: 'stage' }, [R.row, R.prev, R.next, R.count])
+      ])])
     ]);
 
     root.appendChild(style);
@@ -619,6 +667,12 @@
     renderCards();
     setTimeout(updateArrows, 0);
     window.addEventListener('resize', updateArrows);
+  }
+  function setOpen(open) {
+    R.hero.classList.toggle('is-open', open);
+    R.toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    R.chev.style.transform = open ? '' : 'rotate(-90deg)';
+    if (open) setTimeout(function () { updateArrows(); scrollCardIntoView(active); }, 360);
   }
   function stepScroll(dir) {
     var card = R.row.querySelector('.card');
@@ -639,7 +693,15 @@
     ' background:radial-gradient(circle at 50% 18%,rgba(168,85,247,.14) 0%,transparent 45%),radial-gradient(circle at 50% 68%,rgba(34,255,136,.12) 0%,transparent 55%),linear-gradient(180deg,#0B0F14 0%,#0E141C 62%,#080B0F 100%);',
     ' box-shadow:0 24px 60px rgba(0,0,0,.55)}',
     '.nav{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-bottom:6px}',
-    '.brand{display:flex;align-items:center;gap:8px;font:700 13px "Space Grotesk","Hind Siliguri",sans-serif;letter-spacing:.14em;color:#C9D4DF}',
+    '.brand{background:none;border:0;cursor:pointer;min-height:40px;padding:0 4px;border-radius:10px;display:flex;align-items:center;gap:8px;font:700 13px "Space Grotesk","Hind Siliguri",sans-serif;letter-spacing:.14em;color:#C9D4DF}',
+    '.brand svg{transition:transform .25s}',
+    '.body{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows .35s ease,visibility 0s .35s}',
+    '.hero.is-open .body{grid-template-rows:1fr;visibility:visible;transition:grid-template-rows .35s ease,visibility 0s}',
+    '.body-in{overflow:hidden;min-height:0}',
+    '.hero:not(.is-open){padding-bottom:10px}',
+    '.hero:not(.is-open) .actions{display:none}',
+    '.photo-prev{height:96px;border-radius:12px;background-size:cover;background-position:center;border:1px solid rgba(255,255,255,.2);display:flex;align-items:flex-end;padding:6px 8px}',
+    '.photo-prev .ph-hint{background:rgba(6,10,16,.7);padding:2px 8px;border-radius:99px;color:#E7EEF5}',
     '.dot{width:8px;height:8px;border-radius:50%;background:#22FF88;box-shadow:0 0 10px #22FF88}',
     '.actions{display:flex;align-items:center;gap:8px;margin-left:auto}',
     '.searchbox{display:flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);color:#22FF88;transition:border-color .25s,box-shadow .25s}',
@@ -672,8 +734,8 @@
     '.mini{width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:rgba(0,0,0,.5);color:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .2s,color .2s}',
     '.mini:hover{background:#22FF88;color:#06130B;border-color:#22FF88}',
     '.mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-height:0}',
-    '.logo{width:74px;height:74px;border-radius:19px;background:#F3F6F9;display:flex;align-items:center;justify-content:center;padding:10px;overflow:hidden;box-shadow:0 8px 18px rgba(0,0,0,.5)}',
-    '.logo img{width:100%;height:100%;object-fit:contain;display:block}',
+    '.logo{width:74px;height:74px;border-radius:50%;background:transparent;display:flex;align-items:center;justify-content:center;padding:0;overflow:hidden;border:2px solid rgba(255,255,255,.55);box-shadow:0 8px 18px rgba(0,0,0,.45)}',
+    '.logo img{width:100%;height:100%;object-fit:cover;display:block;border-radius:50%}',
     '.logo.is-mono{background:var(--a,#22FF88);padding:0}',
     '.mono{font:700 32px "Space Grotesk","Hind Siliguri",sans-serif;color:#06130B}',
     '.here{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:#22FF88;color:#06130B}',
@@ -701,7 +763,7 @@
     'input[type=text]:focus,select:focus{border-color:#22FF88}',
     '.logo-box{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px dashed rgba(34,255,136,.5);border-radius:12px;background:#0A0F16}',
     '.preview{display:flex;align-items:center;gap:12px}',
-    '.preview .logo{width:56px;height:56px;border-radius:14px;padding:8px;flex:none}',
+    '.preview .logo{width:56px;height:56px;flex:none}',
     '.preview .mono{font-size:24px}',
     '.hint{font-size:12.5px;color:#9AA6B2}',
     '.file{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}',
